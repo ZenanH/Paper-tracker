@@ -13,11 +13,11 @@ export function encrypt(value: string): string {
   const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
   return [iv, cipher.getAuthTag(), ciphertext].map(b => b.toString('base64url')).join('.');
 }
-export function decrypt(value: string): string {
+export function decrypt(value: string, label = 'AI 密钥'): string {
   const [iv, tag, data] = value.split('.').map(b => Buffer.from(b, 'base64url'));
   const key = createHash('sha256').update(secret(config().encryptionFile)).digest();
   try { const decipher = createDecipheriv('aes-256-gcm', key, iv); decipher.setAuthTag(tag); return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8'); }
-  catch { throw new AppError('AI 密钥无法解密，请检查是否挂载了原实例的加密密钥。', 503, 'encryption_key_mismatch'); }
+  catch { throw new AppError(`${label}无法解密，请检查是否挂载了原实例的加密密钥。`, 503, 'encryption_key_mismatch'); }
 }
 export function checkOrigin(request: Request) {
   const origin = request.headers.get('origin');

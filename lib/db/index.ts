@@ -29,6 +29,27 @@ export class Store {
   migrateSupplemental() {
     this.db.exec("CREATE TABLE IF NOT EXISTS source_settings (id INTEGER PRIMARY KEY CHECK(id=1), crossref_email TEXT NOT NULL DEFAULT '')");
     this.db.exec('CREATE TABLE IF NOT EXISTS crossref_routes (issn TEXT PRIMARY KEY, checked_at INTEGER NOT NULL)');
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS webdav_settings (
+        id INTEGER PRIMARY KEY CHECK(id=1), base_url TEXT NOT NULL DEFAULT '', remote_path TEXT NOT NULL DEFAULT 'paper-tracker/config.json',
+        username TEXT NOT NULL DEFAULT '', encrypted_password TEXT, initialized INTEGER NOT NULL DEFAULT 0,
+        sync_direction TEXT NOT NULL DEFAULT 'local_to_cloud' CHECK(sync_direction IN ('local_to_cloud','cloud_to_local'))
+      );
+      CREATE TABLE IF NOT EXISTS config_sync (
+        id INTEGER PRIMARY KEY CHECK(id=1), desired_hash TEXT, uploaded_hash TEXT,
+        state TEXT NOT NULL DEFAULT 'idle' CHECK(state IN ('idle','pending','retrying','failed')),
+        last_attempt_at INTEGER, last_success_at INTEGER, last_error TEXT,
+        lease_owner TEXT, lease_until INTEGER, fence INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT OR IGNORE INTO webdav_settings(id) VALUES(1);
+      INSERT OR IGNORE INTO config_sync(id) VALUES(1);
+    `);
+    const webdavColumns = new Set(this.all<{ name: string }>('PRAGMA table_info(webdav_settings)').map(column => column.name));
+    if (!webdavColumns.has('sync_direction')) this.db.exec("ALTER TABLE webdav_settings ADD COLUMN sync_direction TEXT NOT NULL DEFAULT 'local_to_cloud' CHECK(sync_direction IN ('local_to_cloud','cloud_to_local'))");
+    const configSyncColumns = new Set(this.all<{ name: string }>('PRAGMA table_info(config_sync)').map(column => column.name));
+    if (!configSyncColumns.has('lease_owner')) this.db.exec('ALTER TABLE config_sync ADD COLUMN lease_owner TEXT');
+    if (!configSyncColumns.has('lease_until')) this.db.exec('ALTER TABLE config_sync ADD COLUMN lease_until INTEGER');
+    if (!configSyncColumns.has('fence')) this.db.exec('ALTER TABLE config_sync ADD COLUMN fence INTEGER NOT NULL DEFAULT 0');
     if (this.one("SELECT name FROM sqlite_master WHERE type='table' AND name='paper_listing'")) this.db.exec(`
       CREATE INDEX IF NOT EXISTS inbox_all_page ON paper_listing(published_sort DESC,paper_id DESC) WHERE inbox_visible=1;
       CREATE INDEX IF NOT EXISTS task_kind_state ON task(kind,state,next_attempt_at);
@@ -62,10 +83,11 @@ export function store() {
 export function bootstrap(path: string, now = Date.now(), initialize?: (s: Store) => void) {
   const s = new Store(path, true);
   s.transaction(() => {
-    const version = s.one<{ user_version: number }>('PRAGMA user_version')!.user_version;
-    if (version === 0) s.db.exec(schema);
-    else if (version !== 1) throw new Error('不支持的数据库版本，停止启动。');
+    let version = s.one<{ user_version: number }>('PRAGMA user_version')!.user_version;
+    if (version === 0) { s.db.exec(schema); version = 1; }
+    if (version < 1 || version > 3) throw new Error('不支持的数据库版本，停止启动。');
     s.migrateSupplemental();
+    if (version < 3) s.db.exec('PRAGMA user_version=3');
     const created = s.run('INSERT OR IGNORE INTO installation(id,instance_id,installed_at,deployment_month_start,next_scheduled_at) VALUES(1,?,?,?,?)', [randomUUID(), now, monthStart(now), nextScheduled(now, 8, 0)]);
     s.run('INSERT OR IGNORE INTO ai_settings(id,filter_prompt) VALUES(1,?)', [DEFAULT_FILTER]);
     if (created.changes) initialize?.(s);

@@ -86,6 +86,13 @@ h1 { font-size: 34px; line-height: 1.4; font-weight: 450; letter-spacing: -1.4px
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior: auto !important; }.button,.icon-button,.progress-fill { transition: none; }.toast { transition: opacity 200ms var(--ease-out); } }
 .main-content { width: 100%; max-width: 1680px; margin-inline: auto; }
 .section-description { margin-bottom: 18px; }
+.field select { width: 100%; background: rgba(7,13,10,.3); border: 1px solid rgba(187,217,197,.12); border-radius: 6px; padding: 11px 12px; font-size: 13px; line-height: 1.7; color: var(--text); }
+.check-field { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+.check-field input { width: 16px; height: 16px; accent-color: var(--mint-dark); }
+.webdav-status { display: grid; gap: 6px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.7; }
+.webdav-status strong { color: var(--mint); font-weight: 500; }
+.webdav-status span { color: var(--error); overflow-wrap: anywhere; }
+.webdav-status small { color: var(--dim); }
 @media (max-width: 1050px) {
   .workspace { display: flex; flex-direction: column-reverse; gap: 22px; }
   .reading-pane { width: 100%; }

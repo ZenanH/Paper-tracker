@@ -11,6 +11,8 @@ import { enqueueSync } from '../../../lib/sync.ts';
 import { statusSnapshot } from '../../../lib/status.ts';
 import { nextScheduled } from '../../../lib/time.ts';
 import { ExternalError } from '../../../lib/network.ts';
+import { recordConfigurationChanged, publicWebDAVSettings, requestWebDAVBackupRetry, runWebDAVSync, saveWebDAVConnection } from '../../../lib/config-sync.ts';
+import { webdavErrorMessage } from '../../../lib/webdav-client.ts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -79,15 +81,35 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
     if (path === 'settings/crossref' && method === 'GET') return jsonResponse(request, { email: s.one<{ crossref_email: string }>('SELECT crossref_email FROM source_settings WHERE id=1')?.crossref_email ?? '' });
     if (path === 'settings/crossref' && method === 'POST') {
       const data = z.object({ email: z.union([z.literal(''), z.email()]).transform(v => v.trim()).pipe(z.string().max(254)) }).parse(await input(request));
-      s.run('INSERT INTO source_settings(id,crossref_email) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET crossref_email=excluded.crossref_email', [data.email]);
+      s.transaction(() => {
+        const old = s.one<{ crossref_email: string }>('SELECT crossref_email FROM source_settings WHERE id=1')?.crossref_email ?? '';
+        if (old === data.email) return;
+        s.run('INSERT INTO source_settings(id,crossref_email) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET crossref_email=excluded.crossref_email', [data.email]);
+        recordConfigurationChanged(s);
+      });
       return jsonResponse(request, { email: data.email });
+    }
+    if (path === 'settings/webdav' && method === 'GET') return jsonResponse(request, publicWebDAVSettings(s));
+    if (path === 'settings/webdav' && method === 'POST') {
+      const data = z.discriminatedUnion('action', [
+        z.object({ action: z.literal('retry') }),
+        z.object({ action: z.literal('sync'), baseURL: z.string().max(2000), remotePath: z.string().max(1024), username: z.string().max(256), password: z.string().max(4096).optional(), clearCredentials: z.boolean().optional(), direction: z.enum(['local_to_cloud', 'cloud_to_local']) })
+      ]).parse(await input(request));
+      if (data.action === 'retry') return jsonResponse(request, requestWebDAVBackupRetry(s));
+      saveWebDAVConnection(s, data);
+      return jsonResponse(request, await runWebDAVSync(s, data.direction, request.signal));
     }
     if (path === 'settings' && method === 'GET') return jsonResponse(request, publicSettings(s));
     if (path === 'settings' && method === 'POST') return jsonResponse(request, saveSettings(s, await input(request)));
     if (path === 'settings/test' && method === 'POST') return jsonResponse(request, await testAI(s, request.signal));
     if (path === 'settings/schedule' && method === 'POST') {
       const body = z.object({ hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59) }).parse(await input(request));
-      s.run('UPDATE installation SET schedule_hour=?,schedule_minute=?,schedule_version=schedule_version+1,next_scheduled_at=? WHERE id=1', [body.hour, body.minute, nextScheduled(Date.now(), body.hour, body.minute)]);
+      s.transaction(() => {
+        const current = s.installation();
+        if (current.schedule_hour === body.hour && current.schedule_minute === body.minute) return;
+        s.run('UPDATE installation SET schedule_hour=?,schedule_minute=?,schedule_version=schedule_version+1,next_scheduled_at=? WHERE id=1', [body.hour, body.minute, nextScheduled(Date.now(), body.hour, body.minute)]);
+        recordConfigurationChanged(s);
+      });
       return jsonResponse(request, { ok: true });
     }
     if (path === 'tasks/stop' && method === 'POST') {
@@ -104,6 +126,7 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
   } catch (error) {
     if (error instanceof AppError) return jsonResponse(request, { error: error.message, code: error.code }, { status: error.status });
     if (error instanceof z.ZodError) return jsonResponse(request, { error: '输入格式不正确，请检查填写内容。', code: 'validation_failed' }, { status: 400 });
+    if (error instanceof ExternalError && error.code.startsWith('webdav_')) return jsonResponse(request, { error: webdavErrorMessage(error.code), code: error.code }, { status: 502 });
     if (error instanceof ExternalError) return jsonResponse(request, { error: error.code.startsWith('ai_') ? 'AI 连接或响应异常，请检查配置后重试。' : '论文来源暂时不可用，请稍后重试。', code: error.code }, { status: 502 });
     console.error('API: 请求未完成，请检查数据库、外挂目录或服务配置。');
     return jsonResponse(request, { error: '服务暂不可用，请检查数据库与外挂目录。', code: 'service_unavailable' }, { status: 503 });

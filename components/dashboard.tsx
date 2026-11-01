@@ -33,9 +33,33 @@ export function Dashboard() {
   const [confirmation, setConfirmation] = useState<{ message: string; action: () => Promise<void> } | null>(null), [confirming, setConfirming] = useState(false);
   const [detail, setDetail] = useState<{ titleOriginal: string; titleZh: string | null; journalName: string; published: string | null; source: string; reason: string | null; url: string } | null>(null);
   const lastVersion = useRef<number | null>(null), requestVersion = useRef(0), statusRef = useRef<Status | null>(null);
+  const webdavFailureRef = useRef('');
   const notify = useCallback((notice: Omit<Notice, 'id'>) => setNotices(old => [...old, { ...notice, id: crypto.randomUUID() }]), []);
   const removeNotice = useCallback((id: string) => setNotices(old => old.filter(n => n.id !== id)), []);
   const confirm = useCallback((message: string, action: () => Promise<void>) => setConfirmation({ message, action }), []);
+
+  useEffect(() => {
+    if (view === 'settings') return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    async function pollWebDAV() {
+      if (stopped) return;
+      if (!document.hidden && navigator.onLine) {
+        try {
+          const state = await api<{ status: string; lastAttemptAt: number | null; lastError: string | null }>('settings/webdav', { uncached: true });
+          const failureId = (state.status === 'failed' || state.status === 'retrying') ? state.lastError || '' : '';
+          if (failureId && webdavFailureRef.current !== failureId) {
+            webdavFailureRef.current = failureId;
+            notify({ message: `WebDAV backup ${state.status === 'retrying' ? 'failed; automatic retry is pending' : 'failed'}: ${state.lastError}`, tone: 'error' });
+          } else if (!failureId) webdavFailureRef.current = '';
+        } catch { /* Keep background status polling unobtrusive. */ }
+      }
+      if (!stopped) timer = setTimeout(pollWebDAV, 15000);
+    }
+    function resume() { clearTimeout(timer); if (!document.hidden && navigator.onLine) void pollWebDAV(); }
+    void pollWebDAV();
+    document.addEventListener('visibilitychange', resume); window.addEventListener('online', resume);
+    return () => { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', resume); window.removeEventListener('online', resume); };
+  }, [view, notify]);
 
   const [pendingData, setPendingData] = useState(0), [journalsReady, setJournalsReady] = useState(false);
   const loadJournals = useCallback(async (cursor?: string) => {

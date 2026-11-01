@@ -17,7 +17,7 @@ fi
 docker run --rm -i --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$instance_dir,target=/instance" \
   -e INSTANCE_HOST_PATH="$instance_dir" -e PUID -e PGID -e APP_URL -e WEB_PORT \
-  -e BIND_ADDRESS -e COMPOSE_PROJECT_NAME -e AI_ALLOWED_ORIGINS -e CROSSREF_MAILTO \
+  -e BIND_ADDRESS -e COMPOSE_PROJECT_NAME -e AI_ALLOWED_ORIGINS -e WEBDAV_ALLOWED_ORIGINS -e CROSSREF_MAILTO \
   node:24.22.1-bookworm-slim node --input-type=module < scripts/prepare-instance.mjs
 docker compose --env-file "$instance_dir/compose.env" build init
 docker compose --env-file "$instance_dir/compose.env" stop web worker

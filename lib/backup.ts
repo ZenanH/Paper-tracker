@@ -12,7 +12,7 @@ const digest = (data: Uint8Array) => createHash('sha256').update(data).digest('h
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const manifestSchema = z.object({
   formatVersion: z.literal(1), snapshotId: z.string().uuid(), createdAt: z.string().datetime(),
-  appVersion: z.string(), schemaVersion: z.literal(1), sqliteVersion: z.string(),
+  appVersion: z.string(), schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]), sqliteVersion: z.string(),
   size: z.number().int().positive().safe(), sha256: sha,
   parts: z.array(z.object({ file: z.string().regex(/^part-\d{6}\.bin\.gz$/), offset: z.number().int().nonnegative().safe(), rawSize: z.number().int().positive().max(BLOCK_SIZE), compressedSize: z.number().int().positive().max(BLOCK_SIZE + 65536), rawSha256: sha, compressedSha256: sha })).min(1)
 });
@@ -33,10 +33,10 @@ function checkDatabase(path: string, checkKey: boolean) {
   try {
     if (db.prepare('PRAGMA integrity_check').all().some(row => row.integrity_check !== 'ok') || db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('备份数据库完整性校验失败。');
     const schemaVersion = Number(db.prepare('PRAGMA user_version').get()!.user_version);
-    if (schemaVersion !== 1 || !db.prepare('SELECT installed_at FROM installation WHERE id=1').get()) throw new Error('不支持的备份数据库。');
+    if (![1, 2, 3].includes(schemaVersion) || !db.prepare('SELECT installed_at FROM installation WHERE id=1').get()) throw new Error('不支持的备份数据库。');
     const key = db.prepare('SELECT encrypted_key FROM ai_settings WHERE id=1').get()?.encrypted_key;
     if (checkKey && typeof key === 'string') decrypt(key);
-    return { schemaVersion: 1 as const, sqliteVersion: String(db.prepare('SELECT sqlite_version() version').get()!.version) };
+    return { schemaVersion: schemaVersion as 1 | 2 | 3, sqliteVersion: String(db.prepare('SELECT sqlite_version() version').get()!.version) };
   } finally { db.close(); }
 }
 /** Online Backup API captures WAL commits; only completed, verified snapshots are published. */

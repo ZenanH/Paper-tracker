@@ -11,6 +11,7 @@ export function config() {
     sessionFile: resolve(/* turbopackIgnore: true */ process.env.SESSION_SECRET_FILE || join(home, 'secrets/session_secret')),
     encryptionFile: resolve(/* turbopackIgnore: true */ process.env.ENCRYPTION_KEY_FILE || join(home, 'secrets/encryption_key')),
     allowedOrigins: (process.env.AI_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
+    webdavAllowedOrigins: (process.env.WEBDAV_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
     mailto: process.env.CROSSREF_MAILTO || ''
   };
 }

@@ -3,6 +3,7 @@ import { catalogJournal, searchCatalog, validISSN, type JournalInfo } from './ca
 import { AppError, encodeCursor, decodeCursor } from '../security.ts';
 import { refreshJournal } from '../papers.ts';
 import { enqueueSync } from '../sync.ts';
+import { recordConfigurationChanged } from '../config-sync.ts';
 
 export function followJournal(s: Store, info: JournalInfo, queueSync = true) {
   const issns = info.issns.filter(validISSN);
@@ -17,7 +18,7 @@ export function followJournal(s: Store, info: JournalInfo, queueSync = true) {
     }
     const old = s.one<{ active: number }>('SELECT active FROM journal_follow WHERE journal_id=?', [id]);
     s.run('INSERT INTO journal_follow(journal_id,followed_at) VALUES(?,?) ON CONFLICT(journal_id) DO UPDATE SET active=1,unfollowed_at=NULL', [id, Date.now()]);
-    if (!old?.active) { refreshJournal(s, String(id)); if (queueSync) enqueueSync(s, [String(id)]); s.touch(true); }
+    if (!old?.active) { refreshJournal(s, String(id)); if (queueSync) enqueueSync(s, [String(id)]); s.touch(true); recordConfigurationChanged(s); }
     return { id: String(id), name: info.name, active: true };
   });
 }
@@ -26,11 +27,12 @@ export function setFollow(s: Store, id: string, active: boolean) {
   if (!info) throw new AppError('期刊不存在。', 404);
   if (active) return followJournal(s, JSON.parse(info.metadata));
   return s.transaction(() => {
-    s.run('UPDATE journal_follow SET active=0,unfollowed_at=? WHERE journal_id=? AND active=1', [Date.now(), id]);
+    const changed = s.run('UPDATE journal_follow SET active=0,unfollowed_at=? WHERE journal_id=? AND active=1', [Date.now(), id]).changes > 0;
     s.run("UPDATE task SET state='cancelled',lease_owner=NULL,lease_until=NULL,fence=fence+1 WHERE journal_id=? AND state IN ('queued','retry','running') AND kind='fetch'", [id]);
     s.run('UPDATE paper_listing SET inbox_visible=0 WHERE journal_id=?', [id]);
     s.run('UPDATE journal_stats SET visible_count=0,version=version+1 WHERE journal_id=?', [id]);
     s.touch(true);
+    if (changed) recordConfigurationChanged(s);
     return { id, active: false };
   });
 }
@@ -42,7 +44,7 @@ export function setFilter(s: Store, id: string, enabled: boolean) {
     const count = s.one<{ n: number }>('SELECT COUNT(*) AS n FROM paper p JOIN paper_state ps ON ps.paper_id=p.id WHERE p.journal_id=? AND ps.archived_at IS NULL', [id])!.n;
     s.run('UPDATE journal_follow SET filter_enabled=?,filter_version=filter_version+1 WHERE journal_id=?', [+enabled, id]);
     s.run("UPDATE task SET state='cancelled',fence=fence+1,lease_owner=NULL,lease_until=NULL WHERE journal_id=? AND kind IN ('filter','translate') AND state IN ('queued','retry','running','failed','blocked')", [id]);
-    refreshJournal(s, id); s.touch(true);
+    refreshJournal(s, id); s.touch(true); recordConfigurationChanged(s);
     return { id, enabled, count };
   });
 }
@@ -87,7 +89,7 @@ export function updateJournalCatalog(s: Store) {
         s.run('UPDATE journal_stats SET version=version+1 WHERE journal_id=?', [row.id]); updated++;
       }
     }
-    if (updated) s.touch(true);
+    if (updated) { s.touch(true); recordConfigurationChanged(s); }
     return { checked: rows.length, updated, unmatched, summary: journalSummary(s) };
   });
 }

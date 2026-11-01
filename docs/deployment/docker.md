@@ -28,6 +28,8 @@ Never delete the mounted data or secrets directories during an upgrade. The web 
 
 AI requests use the regular Compose bridge network. DNS answers made entirely of VPN Fake-IP addresses in `198.18.0.0/15` are recognized and mapped from IPv4-mapped IPv6 to IPv4 before connecting; mixed or other private IP answers remain blocked unless the exact origin is listed in `AI_ALLOWED_ORIGINS`. The web service binds to `127.0.0.1:3000` by default. For trusted Tailscale access, set `BIND_ADDRESS` to the host's Tailscale IP and `APP_URL` to the origin users actually open. Write-request origin checks rely on this value. Recreate the services after changing it; do not expose every host interface by default.
 
+WebDAV configuration sync is optional and accepts standard HTTPS WebDAV servers, including services such as Nutstore. Configuration snapshots are encrypted with the instance `ENCRYPTION_KEY_FILE`; restoring them on another instance requires the same key file. The WebDAV password is encrypted in the local database and is never included in the snapshot. Public WebDAV hosts need no extra setting. To use a private or tailnet WebDAV server, add its exact origin (scheme and host, without a path) to `WEBDAV_ALLOWED_ORIGINS` in `compose.env`, then recreate the services. The client rejects redirects and limits response size and request duration.
+
 An isolated deployment check can use its own data directory and port:
 
 ```sh

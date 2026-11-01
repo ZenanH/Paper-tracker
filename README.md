@@ -36,6 +36,7 @@ Keep these directories when upgrading or rebuilding the image. For Tailscale acc
 - Filter and translate paper titles only. Abstracts are not requested, stored, displayed, or sent to AI.
 - Archive a journal's existing papers, favorite individual papers, and keep those states across restarts and unfollowing.
 - Create consistent database backups in independently compressed 16 MiB chunks with SHA-256 verification.
+- Back up followed journals, per-journal filter settings, AI connection settings, Crossref email, and the daily schedule to a generic WebDAV server; configuration snapshots are encrypted with the instance key.
 - Use the bundled 2025 journal partition and JCR 2025 impact-factor snapshots. Data sources and metric-year details are documented in the [journal data notes](data/journals/README.md) and [NOTICE](NOTICE.md).
 
 AI is optional. Without credentials, journal search, synchronization, archiving, and favorites remain available. Each deployment owner supplies and pays for their own AI API usage; the project does not provide shared credentials or an AI proxy.

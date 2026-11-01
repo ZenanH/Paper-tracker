@@ -4,13 +4,14 @@ import { ExternalError } from '../lib/network.ts';
 import { refreshPaper, upsertPaper } from '../lib/papers.ts';
 import { adaptWork, fetchPage, type FetchStep } from '../lib/sources/crossref.ts';
 import { commitTask, type Task, ownsTask } from '../lib/sync.ts';
+import { processWebDAVBackup, recordWebDAVTaskFailure } from '../lib/config-sync.ts';
 
 type FetchCheckpoint = { steps?: FetchStep[]; step?: number; cursor?: string; pageAt?: number; rows?: number };
 function updateTask(s: Store, t: Task, state: string, error: string | null = null, next = 0) {
   s.run('UPDATE task SET state=?,error_code=?,lease_owner=NULL,lease_until=NULL,next_attempt_at=?,updated_at=? WHERE id=?', [state, error, next, Date.now(), t.id]);
 }
 export function failTask(s: Store, t: Task, error: unknown) {
-  const e = error instanceof ExternalError ? error : new ExternalError('processing_failed', true);
+  const e = error instanceof ExternalError ? error : t.kind === 'webdav_backup' && error instanceof Error && 'code' in error ? new ExternalError(String(error.code), false) : new ExternalError('processing_failed', true);
   commitTask(s, t, () => {
     const attempts = t.attempts + 1;
     const blocked = e.code === 'ai_credentials_rejected';
@@ -18,6 +19,7 @@ export function failTask(s: Store, t: Task, error: unknown) {
     const next = Math.max(e.retryAt || 0, Date.now() + Math.min(300_000, 5000 * 2 ** (attempts - 1)) + Math.random() * 1500);
     s.run('UPDATE task SET attempts=? WHERE id=?', [attempts, t.id]);
     updateTask(s, t, state, e.code, next);
+    if (t.kind === 'webdav_backup') recordWebDAVTaskFailure(s, t, e.code, state === 'retry');
     if (t.paper_id) refreshPaper(s, t.paper_id);
   });
 }
@@ -97,6 +99,7 @@ export function processProjection(s: Store, t: Task) {
     updateTask(s, t, rows.length < 200 ? 'succeeded' : 'queued');
   });
 }
+export { processWebDAVBackup };
 type AIPaper = { id: number; title_original: string; title_hash: string; filter_enabled: number; filter_version: number; active: number; archived_at: number | null; favorited_at: number | null; manual_filter_override: string | null };
 export async function processAI(s: Store, tasks: Task[], signal?: AbortSignal) {
   const settings = aiSettings(s), kind = tasks[0].kind;

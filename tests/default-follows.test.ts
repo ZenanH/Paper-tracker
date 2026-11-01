@@ -70,17 +70,22 @@ test('手动 Update 创建从零开始的全刊进度；运行中再次请求复
 
 test('期刊统计覆盖全部关注；目录 Update 不创建论文任务、不覆盖关注和过滤', async () => {
  const { journalSummary, updateJournalCatalog } = await import('../lib/journals/service.ts');
+ const { configurationHash } = await import('../lib/config-sync.ts');
  const dir = mkdtempSync(join(tmpdir(), 'paper-metrics-')), path = join(dir, 'test.sqlite');
  const s = bootstrap(path, Date.now(), seedDefaultJournals);
  try {
+  s.run("UPDATE webdav_settings SET base_url='https://dav.example.test/' ,initialized=1 WHERE id=1");
   s.run('UPDATE journal_follow SET filter_enabled=1 WHERE journal_id=1');
   const original = JSON.parse(s.one<{metadata:string}>('SELECT metadata FROM journal WHERE id=1')!.metadata);
   s.run('UPDATE journal SET metadata=? WHERE id=1',[JSON.stringify({...original,ifDisplay:'0',ifValue:0})]);
-  const tasks = s.one<{n:number}>('SELECT COUNT(*) n FROM task')!.n;
+  const fetchTasks = s.one<{n:number}>("SELECT COUNT(*) n FROM task WHERE kind='fetch'")!.n;
   const result = updateJournalCatalog(s);
   assert.equal(result.checked,33); assert.equal(result.updated,1); assert.equal(result.unmatched,0);
   assert.equal(journalSummary(s).total,33);
-  assert.equal(s.one<{n:number}>('SELECT COUNT(*) n FROM task')!.n,tasks);
+  assert.equal(s.one<{n:number}>("SELECT COUNT(*) n FROM task WHERE kind='fetch'")!.n,fetchTasks);
+  const backup = s.one<{state:string;payload:string}>("SELECT state,payload FROM task WHERE kind='webdav_backup'");
+  assert.equal(backup?.state,'queued');
+  assert.equal(JSON.parse(backup!.payload).hash,configurationHash(s));
   assert.equal(s.one<{filter_enabled:number}>('SELECT filter_enabled FROM journal_follow WHERE journal_id=1')!.filter_enabled,1);
   s.run('UPDATE journal_follow SET active=0 WHERE journal_id=1'); assert.equal(journalSummary(s).total,32);
  } finally {s.close();rmSync(dir,{recursive:true,force:true});}

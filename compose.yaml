@@ -6,6 +6,7 @@ x-app: &app
   environment: &environment
     APP_URL: ${APP_URL:-http://localhost:3000}
     AI_ALLOWED_ORIGINS: ${AI_ALLOWED_ORIGINS:-}
+    WEBDAV_ALLOWED_ORIGINS: ${WEBDAV_ALLOWED_ORIGINS:-}
     CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
   volumes:
     - ${PAPER_TRACKER_DATA:-./paper-tracker-data}/data:/app/instance/data

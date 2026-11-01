@@ -7,7 +7,7 @@ import { nextScheduled } from '../lib/time.ts';
 import { aiConcurrency } from '../lib/network.ts';
 import { crossrefConcurrency } from '../lib/sources/crossref.ts';
 import { runPool } from './pool.ts';
-import { failTask, processAI, processFetch, processProjection } from './tasks.ts';
+import { failTask, processAI, processFetch, processProjection, processWebDAVBackup } from './tasks.ts';
 
 export async function workerTick(s: Store, turn: number, signal?: AbortSignal, onlyKind?: string, singleSlot = false) {
   const now = Date.now(), installation = s.installation();
@@ -17,7 +17,7 @@ export async function workerTick(s: Store, turn: number, signal?: AbortSignal, o
       s.run('UPDATE installation SET next_scheduled_at=? WHERE id=1', [nextScheduled(now, installation.schedule_hour, installation.schedule_minute)]);
     });
   }
-  const kinds = onlyKind ? [onlyKind] : ['fetch', 'projection', 'filter', 'translate'];
+  const kinds = onlyKind ? [onlyKind] : ['fetch', 'projection', 'filter', 'translate', 'webdav_backup'];
   for (let i = 0; i < kinds.length; i++) {
     const kind = kinds[(turn + i) % kinds.length];
     if ((kind === 'filter' || kind === 'translate') && !aiReady(aiSettings(s))) continue;
@@ -48,6 +48,7 @@ export async function workerTick(s: Store, turn: number, signal?: AbortSignal, o
     try {
       if (kind === 'fetch') await Promise.all(tasks.map(async task => { try { await processFetch(s, task, operationSignal); } catch (error) { if (!operationSignal.aborted) failTask(s, task, error); } }));
       else if (kind === 'projection') processProjection(s, first);
+      else if (kind === 'webdav_backup') await processWebDAVBackup(s, first, operationSignal);
       else if (kind === 'translate') {
         const batches = Array.from({ length: Math.ceil(tasks.length / 10) }, (_, i) => tasks.slice(i * 10, i * 10 + 10));
         await Promise.all(batches.map(async batch => { try { await processAI(s, batch, operationSignal); } catch (error) { for (const task of batch) failTask(s, task, error); } }));
@@ -75,7 +76,7 @@ export async function runWorker() {
   try {
     // Independent lanes share the durable queue and global provider limiters.
     // A slow translation batch cannot hold up journal retrieval or filtering.
-    const lanes = ['fetch', 'projection', 'filter', 'translate'].map(kind => runPool({
+    const lanes = ['fetch', 'projection', 'filter', 'translate', 'webdav_backup'].map(kind => runPool({
       slots: kind === 'fetch' || kind === 'translate' ? 3 : 1,
       capacity: () => kind === 'fetch' ? crossrefConcurrency() : kind === 'translate' ? aiConcurrency() : 1,
       signal: controller.signal,

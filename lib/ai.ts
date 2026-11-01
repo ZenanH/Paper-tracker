@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Store } from './db/index.ts';
 import { aiURL, aiRequest, ExternalError } from './network.ts';
 import { AppError, decrypt, encrypt, hash } from './security.ts';
+import { recordConfigurationChanged } from './config-sync.ts';
 
 export type AISettings = { id: number; base_url: string; encrypted_key: string | null; model: string; filter_prompt: string; provider_version: number; filter_prompt_version: number; config_version: number };
 export function aiSettings(s: Store) { return s.one<AISettings>('SELECT * FROM ai_settings WHERE id=1')!; }
@@ -38,6 +39,7 @@ export function saveSettings(s: Store, input: unknown) {
     // unclaimable queued tasks holding the workspace update lock indefinitely.
     s.run(`UPDATE task SET state=?,next_attempt_at=0,lease_owner=NULL,lease_until=NULL,fence=fence+1,error_code=? WHERE kind IN ('filter','translate') AND state IN ('queued','running','retry','blocked')`, [ready ? 'queued' : 'blocked', ready ? null : 'ai_not_configured']);
     s.touch(true);
+    recordConfigurationChanged(s);
     return publicSettings(s);
   });
 }
