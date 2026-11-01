@@ -4,7 +4,7 @@ The repository is `ZenanH/Paper-tracker`; container images are published to GHCR
 
 Every push and pull request runs source and data checks, tests, and a production build. A matrix of native Linux AMD64 and ARM64 runners builds the Docker image and verifies the Compose lifecycle and backup/restore flow. A successful push to `main` publishes architecture-specific tags (`<version>-amd64` and `<version>-arm64`) and then creates one immutable multi-platform `<version>` tag.
 
-The release job uses a job-scoped `GITHUB_TOKEN` with `packages: write`. The image version comes from `package.json`; bump the three-part package version for each new release. The first published version was `1.0`; this revision advances to `1.5`. A failed, unpublished release retries with the same version. The workflow does not publish `latest` or Windows images.
+The release job uses a job-scoped `GITHUB_TOKEN` with `packages: write`. The image version comes from `package.json`; bump the three-part package version for each new release. The first published version was `1.0`; this revision advances to `1.7`. A failed, unpublished release retries with the same version. The workflow does not publish `latest` or Windows images.
 
 ## Upload Boundaries
 

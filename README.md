@@ -63,8 +63,8 @@ pnpm test:docker
 
 ## CI and container images
 
-GitHub Actions runs source and data checks, tests, and production builds. On every push and pull request, native Linux AMD64 and ARM64 runners build the container and run the Compose lifecycle and backup checks. A successful push to `main` publishes architecture-specific image tags and a shared multi-platform version tag to GHCR, for example `ghcr.io/zenanh/paper-tracker:1.5`.
+GitHub Actions runs source and data checks, tests, and production builds. On every push and pull request, native Linux AMD64 and ARM64 runners build the container and run the Compose lifecycle and backup checks. A successful push to `main` publishes architecture-specific image tags and a shared multi-platform version tag to GHCR, for example `ghcr.io/zenanh/paper-tracker:1.7`.
 
-Release tags are immutable and come from `package.json`. Releases advance from `1.0` through `1.1`, `1.2`, `1.3`, `1.4`, and `1.5`; failed, unpublished releases reuse their version. The shared version tag resolves to both `linux/amd64` and `linux/arm64`. Windows containers are not supported.
+Release tags are immutable and come from `package.json`. Releases advance from `1.0` through `1.1`, `1.2`, `1.3`, `1.4`, `1.5`, `1.6`, and `1.7`; failed, unpublished releases reuse their version. The shared version tag resolves to both `linux/amd64` and `linux/arm64`. Windows containers are not supported.
 
 See the [CI and release guide](docs/deployment/github.md) for the workflow and upload boundaries. See [CONTRIBUTING.md](CONTRIBUTING.md) for local development details.
