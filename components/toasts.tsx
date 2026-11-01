@@ -43,6 +43,6 @@ function Toast({ notice, remove }: { notice: Notice; remove: (id: string) => voi
       if (notice.action!.expiresAt && notice.action!.expiresAt < Date.now()) { setActionError('Undo period expired'); return; }
       setBusy(true); try { await notice.action!.run(); remove(notice.id); } catch (e) { setActionError(e instanceof Error ? e.message : 'Operation failed'); } finally { setBusy(false); }
     }}>{busy ? 'Processing…' : notice.action.label}</button>}{actionError && <small>{actionError}</small>}</div>
-    <button className="icon-button toast-close" aria-label="Dismiss notification" onClick={() => setFading(true)}><Icon name="close" size={14} /></button>
+    <button className="icon-button toast-close" aria-label="Dismiss notification" onClick={() => remove(notice.id)}><Icon name="close" size={14} /></button>
   </div>;
 }
